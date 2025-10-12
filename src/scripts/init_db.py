@@ -17,7 +17,7 @@ def main():
         raise SystemExit("DATABASE_URL missing in .env")
     engine = create_engine(db_url, future=True, pool_pre_ping=True)
     run_sql_file(engine, Path("src/docs/schema.sql"))
-    print("✅ schema applied")
+    print("schema applied")
 
 if __name__ == "__main__":
     main()

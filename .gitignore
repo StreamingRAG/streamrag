@@ -3,4 +3,6 @@
 
 # Env files
 .env
-!.env.example
+
+# Pycache
+/src/streamrag/__pycache__
