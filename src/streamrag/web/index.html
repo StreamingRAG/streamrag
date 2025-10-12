@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamRAG Demo</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; color: #111; }
+      h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+      .row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+      button { padding: 0.5rem 0.9rem; border: 1px solid #ccc; border-radius: 6px; background: #f7f7f7; cursor: pointer; }
+      button:hover { background: #eee; }
+      input, select, textarea { padding: 0.45rem 0.6rem; border: 1px solid #ccc; border-radius: 6px; min-width: 260px; }
+      .card { border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem; margin-top: 1rem; background: #fff; }
+      .results { margin-top: 1rem; }
+      .muted { color: #666; }
+      .ok { color: #0a7a0a; }
+      .err { color: #b00020; white-space: pre-wrap; }
+      code { background: #f0f0f0; padding: 0.1rem 0.3rem; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>StreamRAG Demo</h1>
+    <p class="muted">Use the buttons below to initialize the database, embed a sample corpus, and run a search.</p>
+
+    <div class="card">
+      <div class="row">
+        <button id="btn-init">Apply Schema (/init)</button>
+        <span id="init-status" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:0.5rem;">
+        <button id="btn-embed">Embed Default Corpus (/embed)</button>
+        <span id="embed-status" class="muted"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <div id="q-display" class="muted" style="padding-bottom: 10px; color: black">
+          Example query: "Find sentences that are about animals"
+        </div>
+      </div>
+      <div class="row">
+       <select id="k">
+          <option value="3">k = 3</option>
+          <option value="5" selected>k = 5</option>
+          <option value="8">k = 8</option>
+          <option value="10">k = 10</option>
+        </select>
+        <button id="btn-search">Search (/search)</button> 
+      </div>
+      <div id="search-status" class="muted" style="margin-top:0.5rem;"></div>
+      <div class="results" id="results"></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <input id="aq" type="text" placeholder="Ask a question" value="What sentences talk about animals?" />
+        <select id="ak">
+          <option value="3">k = 3</option>
+          <option value="5" selected>k = 5</option>
+          <option value="8">k = 8</option>
+        </select>
+        <button id="btn-answer">Answer (/answer)</button>
+      </div>
+      <div id="answer-status" class="muted" style="margin-top:0.5rem;"></div>
+      <div class="results" id="answer"></div>
+    </div>
+
+    <script>
+      const el = (id) => document.getElementById(id);
+
+      async function postJSON(url, body) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body ? JSON.stringify(body) : null,
+        });
+        const text = await res.text();
+        try { return { ok: res.ok, json: JSON.parse(text), raw: text }; }
+        catch { return { ok: res.ok, json: null, raw: text }; }
+      }
+
+      el('btn-init').addEventListener('click', async () => {
+        el('init-status').textContent = 'Running...';
+        const out = await postJSON('/init');
+        if (out.ok) {
+          el('init-status').innerHTML = '<span class="ok">Done</span>';
+        } else {
+          el('init-status').innerHTML = '<span class="err">' + (out.raw || 'Error') + '</span>';
+        }
+      });
+
+      el('btn-embed').addEventListener('click', async () => {
+        el('embed-status').textContent = 'Embedding...';
+        // For now, always use default corpus on the server side
+        let payload = {}; // send empty JSON to avoid optional-body quirks
+        try {
+          const txtArea = document.getElementById('embed-corpus');
+          const txt = (txtArea && txtArea.value) ? txtArea.value.trim() : '';
+          if (txt) {
+            payload = { corpus: JSON.parse(txt) };
+          }
+        } catch (e) {
+          el('embed-status').innerHTML = '<span class="err">Invalid JSON</span>';
+          return;
+        }
+        const out = await postJSON('/embed', payload);
+        if (out.ok) {
+          const inserted = out.json?.inserted ?? '(unknown)';
+          el('embed-status').innerHTML = '<span class="ok">Inserted ' + inserted + ' rows</span>';
+        } else {
+          el('embed-status').innerHTML = '<span class="err">' + (out.raw || 'Error') + '</span>';
+        }
+      });
+
+      el('btn-search').addEventListener('click', async () => {
+        el('search-status').textContent = 'Searching...';
+        const q = 'Find sentences that are about animals.';
+        const k = parseInt(el('k').value, 10) || 5;
+        const out = await postJSON('/search', { query: q, k });
+        if (out.ok) {
+          el('search-status').innerHTML = '<span class="ok">Done</span>';
+          const results = out.json?.results || out.json || [];
+          el('results').innerHTML = '';
+          if (!results.length) {
+            el('results').innerHTML = '<div class="muted">No results</div>';
+          } else {
+            for (const r of results) {
+              const div = document.createElement('div');
+              div.className = 'card';
+              const sim = (r.similarity ?? r.sim ?? 0).toFixed(3);
+              div.innerHTML = `<div><strong>sim:</strong> <code>${sim}</code></div><div>${r.text}</div>`;
+              el('results').appendChild(div);
+            }
+          }
+        } else {
+          el('search-status').innerHTML = '<span class="err">' + (out.raw || 'Error') + '</span>';
+        }
+      });
+
+      el('btn-answer').addEventListener('click', async () => {
+        el('answer-status').textContent = 'Answering...';
+        const q = el('aq').value.trim();
+        const k = parseInt(el('ak').value, 10) || 5;
+        const out = await postJSON('/answer', { query: q, k });
+        const box = el('answer');
+        box.innerHTML = '';
+        if (out.ok) {
+          el('answer-status').innerHTML = '<span class="ok">Done</span>';
+          const ans = out.json?.answer || '(no answer)';
+          const mode = out.json?.mode || '(unknown)';
+          const maxSim = out.json?.max_similarity;
+          const sources = out.json?.sources || [];
+          const div = document.createElement('div');
+          div.className = 'card';
+          const simInfo = (typeof maxSim === 'number') ? maxSim.toFixed(3) : '';
+          div.innerHTML = `<div style="white-space:pre-wrap">${ans}</div>
+                           <div class="muted" style="margin-top:0.5rem">mode: <code>${mode}</code>${simInfo ? ` · max_similarity: <code>${simInfo}</code>` : ''}</div>`;
+          box.appendChild(div);
+          if (sources.length) {
+            const sHead = document.createElement('div');
+            sHead.className = 'muted';
+            sHead.textContent = 'Sources:';
+            box.appendChild(sHead);
+            for (const s of sources) {
+              const sDiv = document.createElement('div');
+              sDiv.className = 'card';
+              const sim = (typeof s.similarity === 'number') ? s.similarity.toFixed(3) : (s.similarity ?? '');
+              sDiv.innerHTML = `<div><strong>sim:</strong> <code>${sim ?? ''}</code></div><div>${s.text}</div>`;
+              box.appendChild(sDiv);
+            }
+          }
+        } else {
+          el('answer-status').innerHTML = '<span class="err">' + (out.raw || 'Error') + '</span>';
+        }
+      });
+    </script>
+  </body>
+  </html>

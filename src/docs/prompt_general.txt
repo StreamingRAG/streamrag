@@ -1,0 +1,13 @@
+Mode: {{MODE}}
+
+{{CONTEXT}}
+
+Question: {{QUESTION}}
+
+Instructions:
+- You may use your general knowledge to answer.
+- If the snippets are irrelevant, ignore them and answer directly from your general knowledge.
+- Prefer any relevant information from the context above when applicable, and cite snippet numbers like [2], [5].
+- Be clear and concise; a short paragraph or 3-5 bullets is fine.
+
+Output: Provide a brief answer with citations when using context.
