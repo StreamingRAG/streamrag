@@ -4,5 +4,9 @@
 # Env files
 .env
 
+# Editor/IDE settings
+.vscode/
+.vs/
+
 # Pycache
 /src/streamrag/__pycache__
