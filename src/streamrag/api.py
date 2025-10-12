@@ -69,6 +69,13 @@ def search(req: SearchRequest):
     out = run_script("scripts/search.py", payload, expect_json=True)
     return out
 
+
+@app.post("/answer")
+def answer(req: SearchRequest):
+    payload = {"query": req.query, "k": req.k}
+    out = run_script("scripts/answer.py", payload, expect_json=True)
+    return out
+
 # Serve the simple HTML UI at root
 static_dir = Path(__file__).parent / "web"
 app.mount("/web", StaticFiles(directory=str(static_dir), html=True), name="web")

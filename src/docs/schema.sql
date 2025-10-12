@@ -15,5 +15,5 @@ CREATE INDEX IF NOT EXISTS demo_chunks_embedding_ivfflat
   ON demo_chunks USING ivfflat (embedding vector_cosine_ops)
   WITH (lists = 100);
 
--- Optional: gather stats to help the planner
+-- Optional: gather stats to help the query planner
 ANALYZE demo_chunks;

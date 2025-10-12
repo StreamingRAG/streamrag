@@ -1,0 +1,15 @@
+Mode: {{MODE}}
+
+{{CONTEXT}}
+
+Question: {{QUESTION}}
+
+Instructions:
+- Base your answer strictly on the context snippets above.
+- Identify which snippets match and explain why (traits, classification, behavior).
+- Briefly note any top snippets that do NOT match and why (anomalies/out-of-scope).
+- Use citations with snippet numbers like [2], [5].
+- Be concise: 3-6 bullets total, each 1-2 short sentences.
+- If insufficient information, reply: I don't know.
+
+Output: Bulleted list with citations; optional one-line summary.

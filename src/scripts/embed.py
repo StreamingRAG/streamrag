@@ -52,26 +52,7 @@ def main() -> int:
         return 3
 
     with engine.begin() as conn:
-        # Ensure schema pieces exist
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        conn.execute(text(
-            f"""
-            CREATE TABLE IF NOT EXISTS {table} (
-              id UUID PRIMARY KEY,
-              text TEXT NOT NULL,
-              created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
-              embedding vector({embed_dim})
-            )
-            """
-        ))
-        conn.execute(text(
-            """
-            CREATE INDEX IF NOT EXISTS demo_chunks_embedding_ivfflat
-              ON demo_chunks USING ivfflat (embedding vector_cosine_ops)
-              WITH (lists = 100)
-            """
-        ))
-        # Demo simplicity: truncate then insert
+        # Rely on /init to create extension/table/index. Only mutate data here.
         conn.execute(text(f"TRUNCATE {table};"))
         ins = text(f"""
             INSERT INTO {table} (id, text, embedding)

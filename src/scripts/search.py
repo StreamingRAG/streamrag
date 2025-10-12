@@ -18,11 +18,11 @@ def main() -> int:
         print("DATABASE_URL missing in .env", file=sys.stderr)
         return 2
 
-    table = os.getenv("TABLE", "demo_chunks")
-    embed_dim = int(os.getenv("EMBED_DIM", "384"))
-    model_name = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-    default_query = os.getenv("QUERY", "Find sentences that are about animals.")
-    default_k = int(os.getenv("TOP_K", "5"))
+    table = os.getenv("TABLE")
+    embed_dim = int(os.getenv("EMBED_DIM"))
+    model_name = os.getenv("EMBED_MODEL")
+    default_query = os.getenv("QUERY")
+    default_k = int(os.getenv("TOP_K"))
 
     stdin_data: Optional[str] = None
     try:
