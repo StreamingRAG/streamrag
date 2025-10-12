@@ -169,7 +169,7 @@
             for (const s of sources) {
               const sDiv = document.createElement('div');
               sDiv.className = 'card';
-              const sim = (s.similarity ?? 0).toFixed ? (s.similarity).toFixed(3) : s.similarity;
+              const sim = (typeof s.similarity === 'number') ? s.similarity.toFixed(3) : (s.similarity ?? '');
               sDiv.innerHTML = `<div><strong>sim:</strong> <code>${sim ?? ''}</code></div><div>${s.text}</div>`;
               box.appendChild(sDiv);
             }
