@@ -13,9 +13,5 @@ dependencies = [
     "sqlalchemy>=2.0.43",
     "uvicorn>=0.37.0",
     "ollama>=0.3.0",
-]
-
-[project.optional-dependencies]
-dev = [
-    "pylint>=3.3.0",
+    "pylint>=4.0.0",
 ]
