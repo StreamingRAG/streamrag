@@ -9,11 +9,11 @@ import json, subprocess, sys
 app = FastAPI(title="StreamRAG Demo API")
 
 
-class EmbedRequest(BaseModel):
+class EmbedRequest(BaseModel):  # pylint: disable=too-few-public-methods
     corpus: list[str] | None = None
 
 
-class SearchRequest(BaseModel):
+class SearchRequest(BaseModel):  # pylint: disable=too-few-public-methods
     query: str
     k: int = Field(5, ge=1, le=100)
 

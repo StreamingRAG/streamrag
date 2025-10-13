@@ -1,4 +1,9 @@
-import os, sys, json, subprocess, ollama
+import json
+import os
+import subprocess
+import sys
+
+import ollama
 from pathlib import Path
 from typing import List, Dict, Any
 from ._util import get_ollama_config
