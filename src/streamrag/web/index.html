@@ -4,20 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>StreamRAG Demo</title>
-    <style>
-      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 2rem; color: #111; }
-      h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-      .row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
-      button { padding: 0.5rem 0.9rem; border: 1px solid #ccc; border-radius: 6px; background: #f7f7f7; cursor: pointer; }
-      button:hover { background: #eee; }
-      input, select, textarea { padding: 0.45rem 0.6rem; border: 1px solid #ccc; border-radius: 6px; min-width: 260px; }
-      .card { border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem; margin-top: 1rem; background: #fff; }
-      .results { margin-top: 1rem; }
-      .muted { color: #666; }
-      .ok { color: #0a7a0a; }
-      .err { color: #b00020; white-space: pre-wrap; }
-      code { background: #f0f0f0; padding: 0.1rem 0.3rem; border-radius: 4px; }
-    </style>
+  <link rel="stylesheet" href="/web/styles.css" />
   </head>
   <body>
     <h1>StreamRAG Demo</h1>
@@ -25,46 +12,48 @@
 
     <div class="card">
       <div class="row">
-        <button id="btn-init">Apply Schema (/init)</button>
+        <button id="btn-init" type="button">Apply Schema (/init)</button>
         <span id="init-status" class="muted"></span>
       </div>
     </div>
 
     <div class="card">
       <div class="row" style="margin-bottom:0.5rem;">
-        <button id="btn-embed">Embed Default Corpus (/embed)</button>
+        <button id="btn-embed" type="button">Embed Default Corpus (/embed)</button>
         <span id="embed-status" class="muted"></span>
       </div>
     </div>
 
     <div class="card">
       <div class="row">
-        <div id="q-display" class="muted" style="padding-bottom: 10px; color: black">
-          Example query: "Find sentences that are about animals"
-        </div>
+        <div id="q-display" class="muted" style="padding-bottom: 10px; color: black">Example query: "Find sentences that are about animals"</div>
       </div>
       <div class="row">
-       <select id="k">
+        <label for="k">Top-k:</label>
+        <select id="k">
           <option value="3">k = 3</option>
           <option value="5" selected>k = 5</option>
           <option value="8">k = 8</option>
           <option value="10">k = 10</option>
         </select>
-        <button id="btn-search">Search (/search)</button> 
+        <button id="btn-search" type="button">Search (/search)</button> 
       </div>
       <div id="search-status" class="muted" style="margin-top:0.5rem;"></div>
       <div class="results" id="results"></div>
     </div>
 
     <div class="card">
+      <div class="row" style="padding-bottom: 10px; color: black">LLM query (plus context):</div>
       <div class="row">
+        <label for="aq">Question:</label>
         <input id="aq" type="text" placeholder="Ask a question" value="What sentences talk about animals?" />
+        <label for="ak">Top-k:</label>
         <select id="ak">
           <option value="3">k = 3</option>
           <option value="5" selected>k = 5</option>
           <option value="8">k = 8</option>
         </select>
-        <button id="btn-answer">Answer (/answer)</button>
+        <button id="btn-answer" type="button">Answer (/answer)</button>
       </div>
       <div id="answer-status" class="muted" style="margin-top:0.5rem;"></div>
       <div class="results" id="answer"></div>
@@ -73,6 +62,7 @@
     <script>
       const el = (id) => document.getElementById(id);
 
+      // Networking
       async function postJSON(url, body) {
         const res = await fetch(url, {
           method: 'POST',
@@ -80,102 +70,168 @@
           body: body ? JSON.stringify(body) : null,
         });
         const text = await res.text();
-        try { return { ok: res.ok, json: JSON.parse(text), raw: text }; }
-        catch { return { ok: res.ok, json: null, raw: text }; }
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
+        return { ok: res.ok, status: res.status, statusText: res.statusText, json: parsed, raw: text };
       }
 
+      // UX helpers
+      function pickErrorMessage(out) {
+        if (!out) return 'Unknown error';
+        const j = out.json || {};
+        const msg = j.error || j.detail || j.message || j.msg;
+        if (msg) return String(msg);
+        if (out.raw && String(out.raw).trim()) return String(out.raw).trim();
+        return `HTTP ${out.status || ''} ${out.statusText || ''}`.trim();
+      }
+
+      function setStatusOk(id, text) {
+        const node = el(id);
+        node.textContent = text;
+        node.className = 'ok';
+      }
+
+      function setStatusErr(id, msg) {
+        const node = el(id);
+        node.className = '';
+        node.innerHTML = '';
+        const span = document.createElement('span');
+        span.className = 'err';
+        span.textContent = msg;
+        node.appendChild(span);
+      }
+
+      function disableAll(...nodes) { nodes.forEach(n => n && (n.disabled = true)); }
+      function enableAll(...nodes) { nodes.forEach(n => n && (n.disabled = false)); }
+
+      function renderSearchResults(containerId, data) {
+        const results = data?.results || data || [];
+        const container = el(containerId);
+        container.innerHTML = '';
+        if (!results.length) {
+          const none = document.createElement('div');
+          none.className = 'muted';
+          none.textContent = 'No results';
+          container.appendChild(none);
+          return;
+        }
+        for (const r of results) {
+          const card = document.createElement('div');
+          card.className = 'card';
+          const sim = (r.similarity ?? r.sim ?? 0).toFixed(3);
+          const simDiv = document.createElement('div');
+          simDiv.innerHTML = `<strong>sim:</strong> <code>${sim}</code>`;
+          const textDiv = document.createElement('div');
+          textDiv.textContent = r.text ?? '';
+          card.appendChild(simDiv);
+          card.appendChild(textDiv);
+          container.appendChild(card);
+        }
+      }
+
+      function renderAnswer(containerId, payload) {
+        const box = el(containerId);
+        box.innerHTML = '';
+        const ans = payload?.answer || '(no answer)';
+        const mode = payload?.mode || '(unknown)';
+        const maxSim = payload?.max_similarity;
+        const sources = payload?.sources || [];
+        const div = document.createElement('div');
+        div.className = 'card';
+        const simInfo = (typeof maxSim === 'number') ? maxSim.toFixed(3) : '';
+        const ansDiv = document.createElement('div');
+        ansDiv.style.whiteSpace = 'pre-wrap';
+        ansDiv.textContent = ans;
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'muted';
+        metaDiv.style.marginTop = '0.5rem';
+        metaDiv.innerHTML = `mode: <code>${mode}</code>${simInfo ? ` · max_similarity: <code>${simInfo}</code>` : ''}`;
+        div.appendChild(ansDiv);
+        div.appendChild(metaDiv);
+        box.appendChild(div);
+        if (sources.length) {
+          const sHead = document.createElement('div');
+          sHead.className = 'muted';
+          sHead.textContent = 'Sources:';
+          box.appendChild(sHead);
+          for (const s of sources) {
+            const sDiv = document.createElement('div');
+            sDiv.className = 'card';
+            const sim = (typeof s.similarity === 'number') ? s.similarity.toFixed(3) : (s.similarity ?? '');
+            const simDiv = document.createElement('div');
+            simDiv.innerHTML = `<strong>sim:</strong> <code>${sim ?? ''}</code>`;
+            const textDiv = document.createElement('div');
+            textDiv.textContent = s.text ?? '';
+            sDiv.appendChild(simDiv);
+            sDiv.appendChild(textDiv);
+            box.appendChild(sDiv);
+          }
+        }
+      }
+
+      // Events
       el('btn-init').addEventListener('click', async () => {
+        const btn = el('btn-init');
+        disableAll(btn);
         el('init-status').textContent = 'Running...';
-        const out = await postJSON('/init');
-        if (out.ok) {
-          el('init-status').innerHTML = '<span class="ok">Done</span>';
-        } else {
-          el('init-status').innerHTML = '<span class="err">' + (out.raw || 'Error') + '</span>';
+        try {
+          const out = await postJSON('/init', {});
+          if (out.ok) setStatusOk('init-status', 'Done');
+          else setStatusErr('init-status', pickErrorMessage(out));
+        } finally {
+          enableAll(btn);
         }
       });
 
       el('btn-embed').addEventListener('click', async () => {
+        const btn = el('btn-embed');
+        disableAll(btn);
         el('embed-status').textContent = 'Embedding...';
-        // For now, always use default corpus on the server side
-        let payload = {}; // send empty JSON to avoid optional-body quirks
         try {
-          const txtArea = document.getElementById('embed-corpus');
-          const txt = (txtArea && txtArea.value) ? txtArea.value.trim() : '';
-          if (txt) {
-            payload = { corpus: JSON.parse(txt) };
-          }
-        } catch (e) {
-          el('embed-status').innerHTML = '<span class="err">Invalid JSON</span>';
-          return;
-        }
-        const out = await postJSON('/embed', payload);
-        if (out.ok) {
-          const inserted = out.json?.inserted ?? '(unknown)';
-          el('embed-status').innerHTML = '<span class="ok">Inserted ' + inserted + ' rows</span>';
-        } else {
-          el('embed-status').innerHTML = '<span class="err">' + (out.raw || 'Error') + '</span>';
+          const out = await postJSON('/embed', {});
+          if (out.ok) {
+            const inserted = out.json?.inserted ?? '(unknown)';
+            setStatusOk('embed-status', `Inserted ${inserted} rows`);
+          } else setStatusErr('embed-status', pickErrorMessage(out));
+        } finally {
+          enableAll(btn);
         }
       });
 
       el('btn-search').addEventListener('click', async () => {
+        const btn = el('btn-search');
+        const kSel = el('k');
+        disableAll(btn, kSel);
         el('search-status').textContent = 'Searching...';
-        const q = 'Find sentences that are about animals.';
-        const k = parseInt(el('k').value, 10) || 5;
-        const out = await postJSON('/search', { query: q, k });
-        if (out.ok) {
-          el('search-status').innerHTML = '<span class="ok">Done</span>';
-          const results = out.json?.results || out.json || [];
-          el('results').innerHTML = '';
-          if (!results.length) {
-            el('results').innerHTML = '<div class="muted">No results</div>';
-          } else {
-            for (const r of results) {
-              const div = document.createElement('div');
-              div.className = 'card';
-              const sim = (r.similarity ?? r.sim ?? 0).toFixed(3);
-              div.innerHTML = `<div><strong>sim:</strong> <code>${sim}</code></div><div>${r.text}</div>`;
-              el('results').appendChild(div);
-            }
-          }
-        } else {
-          el('search-status').innerHTML = '<span class="err">' + (out.raw || 'Error') + '</span>';
+        try {
+          const q = 'Find sentences that are about animals.';
+          const k = parseInt(kSel.value, 10) || 5;
+          const out = await postJSON('/search', { query: q, k });
+          if (out.ok) {
+            setStatusOk('search-status', 'Done');
+            renderSearchResults('results', out.json);
+          } else setStatusErr('search-status', pickErrorMessage(out));
+        } finally {
+          enableAll(btn, kSel);
         }
       });
 
       el('btn-answer').addEventListener('click', async () => {
+        const btn = el('btn-answer');
+        const qIn = el('aq');
+        const kSel = el('ak');
+        disableAll(btn, qIn, kSel);
         el('answer-status').textContent = 'Answering...';
-        const q = el('aq').value.trim();
-        const k = parseInt(el('ak').value, 10) || 5;
-        const out = await postJSON('/answer', { query: q, k });
-        const box = el('answer');
-        box.innerHTML = '';
-        if (out.ok) {
-          el('answer-status').innerHTML = '<span class="ok">Done</span>';
-          const ans = out.json?.answer || '(no answer)';
-          const mode = out.json?.mode || '(unknown)';
-          const maxSim = out.json?.max_similarity;
-          const sources = out.json?.sources || [];
-          const div = document.createElement('div');
-          div.className = 'card';
-          const simInfo = (typeof maxSim === 'number') ? maxSim.toFixed(3) : '';
-          div.innerHTML = `<div style="white-space:pre-wrap">${ans}</div>
-                           <div class="muted" style="margin-top:0.5rem">mode: <code>${mode}</code>${simInfo ? ` · max_similarity: <code>${simInfo}</code>` : ''}</div>`;
-          box.appendChild(div);
-          if (sources.length) {
-            const sHead = document.createElement('div');
-            sHead.className = 'muted';
-            sHead.textContent = 'Sources:';
-            box.appendChild(sHead);
-            for (const s of sources) {
-              const sDiv = document.createElement('div');
-              sDiv.className = 'card';
-              const sim = (typeof s.similarity === 'number') ? s.similarity.toFixed(3) : (s.similarity ?? '');
-              sDiv.innerHTML = `<div><strong>sim:</strong> <code>${sim ?? ''}</code></div><div>${s.text}</div>`;
-              box.appendChild(sDiv);
-            }
-          }
-        } else {
-          el('answer-status').innerHTML = '<span class="err">' + (out.raw || 'Error') + '</span>';
+        try {
+          const q = qIn.value.trim();
+          const k = parseInt(kSel.value, 10) || 5;
+          const out = await postJSON('/answer', { query: q, k });
+          if (out.ok) {
+            setStatusOk('answer-status', 'Done');
+            renderAnswer('answer', out.json);
+          } else setStatusErr('answer-status', pickErrorMessage(out));
+        } finally {
+          enableAll(btn, qIn, kSel);
         }
       });
     </script>

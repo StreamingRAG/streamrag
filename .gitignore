@@ -10,3 +10,4 @@
 
 # Pycache
 /src/streamrag/__pycache__
+/src/scripts/__pycache__
