@@ -23,20 +23,15 @@ jobs:
             - name: Install uv
               uses: astral-sh/setup-uv@v3
 
-            - name: Install dependencies
+            - name: Install dependencies (with dev extras)
               run: |
-                uv sync --frozen
+                uv sync --frozen --extra dev
 
             # Create a .env from GitHub secrets (keeps sensitive values out of repo)
             - name: Create .env from secrets
               run: |
                 echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
                 echo "TABLE=${{ secrets.TABLE }}" >> .env
-
-            # Install pylint into the project environment so imports resolve
-            - name: Install pylint
-              run: |
-                uv run python -m pip install --upgrade pip pylint
 
             # Run pylint in the project environment
             - name: Run pylint
