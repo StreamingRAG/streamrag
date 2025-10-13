@@ -1,26 +1,14 @@
-import sys, os, uuid, json
+import sys, uuid, json
 from typing import List
-
-import numpy as np
-from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
-from sentence_transformers import SentenceTransformer
-
-
-def to_pgvector_literal(vec: np.ndarray) -> str:
-    return "[" + ",".join(f"{float(x):.7f}" for x in vec) + "]"
+from sqlalchemy import text
+from ._util import to_pgvector_literal, get_sentence_model, init_engine_table_dim
 
 
 def main() -> int:
-    load_dotenv()
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        print("DATABASE_URL missing in .env", file=sys.stderr)
-        return 2
-
-    table = os.getenv("TABLE", "demo_chunks")
-    embed_dim = int(os.getenv("EMBED_DIM", "384"))
-    model_name = os.getenv("EMBED_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+    # Engine/table/dim from util; centralized error handling within init
+    engine, table, embed_dim = init_engine_table_dim(exit_on_error=True)
+    # Model from util; EMBED_MODEL must be set in environment
+    model = get_sentence_model()
 
     # Use a fixed default corpus (ignores any stdin for now)
     corpus: List[str] = [
@@ -38,8 +26,6 @@ def main() -> int:
         "Trains run on tracks and can carry many people.",
     ]
 
-    engine = create_engine(db_url, future=True, pool_pre_ping=True)
-    model = SentenceTransformer(model_name)
     vecs = model.encode(corpus, convert_to_numpy=True, normalize_embeddings=True)
     if vecs.shape[1] != embed_dim:
         print(
