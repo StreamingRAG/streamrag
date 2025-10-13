@@ -30,7 +30,7 @@ jobs:
             # Create a .env from GitHub secrets (keeps sensitive values out of repo)
             - name: Create .env from secrets
               run: |
-                echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" >> .env
+                echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > .env
                 echo "TABLE=${{ secrets.TABLE }}" >> .env
 
             # Install pylint into the project environment
