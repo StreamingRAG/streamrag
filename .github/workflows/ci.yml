@@ -27,11 +27,16 @@ jobs:
               run: |
                 uv sync --frozen
 
-            # Create a .env from GitHub secrets (keeps sensitive values out of repo)
+            # Create a .env from GitHub secrets (quoted values, safe for special chars)
             - name: Create .env from secrets
+              env:
+                DATABASE_URL: ${{ secrets.DATABASE_URL }}
+                TABLE: ${{ secrets.TABLE }}
               run: |
-                echo "DATABASE_URL=${{ secrets.DATABASE_URL }}" > .env
-                echo "TABLE=${{ secrets.TABLE }}" >> .env
+                {
+                  printf 'DATABASE_URL="%s"\n' "$DATABASE_URL"
+                  printf 'TABLE="%s"\n' "$TABLE"
+                } > .env
 
             # Install pylint into the project environment
             - name: Install pylint
