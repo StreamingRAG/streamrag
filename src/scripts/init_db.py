@@ -1,7 +1,6 @@
 from pathlib import Path
-import os
-from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
+from ._util import get_engine
 
 def run_sql_file(engine, path: Path) -> None:
     sql = path.read_text(encoding="utf-8")
@@ -11,12 +10,9 @@ def run_sql_file(engine, path: Path) -> None:
             conn.execute(text(stmt))
 
 def main():
-    load_dotenv()
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        raise SystemExit("DATABASE_URL missing in .env")
-    engine = create_engine(db_url, future=True, pool_pre_ping=True)
-    run_sql_file(engine, Path("src/docs/schema.sql"))
+    engine = get_engine()
+    docs_dir = Path(__file__).resolve().parents[1] / "docs"
+    run_sql_file(engine, docs_dir / "schema.sql")
     print("schema applied")
 
 if __name__ == "__main__":

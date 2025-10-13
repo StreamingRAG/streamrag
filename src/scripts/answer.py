@@ -1,7 +1,7 @@
-import os, sys, json, subprocess
+import os, sys, json, subprocess, ollama
+from pathlib import Path
 from typing import List, Dict, Any
-
-from dotenv import load_dotenv
+from ._util import get_ollama_config
 
 def _format_context(results: List[Dict[str, Any]]) -> str:
     lines: List[str] = ["Context snippets:"]
@@ -18,13 +18,15 @@ def _load_template(path: str | None) -> str | None:
         if os.path.isfile(path):
             with open(path, "r", encoding="utf-8") as f:
                 return f.read()
-    except Exception:
+    except OSError:
+        # Ignore file-related errors and fall back to default prompt
         pass
     return None
 
 
 def run_search(query: str, k: int) -> Dict[str, Any]:
-    cmd = [sys.executable, os.path.join(os.path.dirname(__file__), "search.py")]
+    # Prefer running as a module to keep relative imports working
+    cmd = [sys.executable, "-m", "scripts.search"]
     payload = json.dumps({"query": query, "k": k}).encode("utf-8")
     proc = subprocess.run(cmd, input=payload, capture_output=True, check=False)
     if proc.returncode != 0:
@@ -38,110 +40,80 @@ def build_prompt(query: str, results: List[Dict[str, Any]], *, mode: str = "grou
       - PROMPT_TEMPLATE_GROUNDED_PATH
       - PROMPT_TEMPLATE_GENERAL_PATH
     Placeholders: {{MODE}}, {{CONTEXT}}, {{QUESTION}}
-    Falls back to a built-in prompt if the selected file is missing.
+    Loads templates from src/docs and does not use in-code fallbacks.
     """
-    # Choose mode-specific template only
-    template = _load_template(
-        os.getenv("PROMPT_TEMPLATE_GENERAL_PATH") if mode == "general" else os.getenv("PROMPT_TEMPLATE_GROUNDED_PATH")
+    # Resolve template path under src/docs in a single expression
+    tpl_path = Path(__file__).resolve().parents[1] / "docs" / (
+        "prompt_general.txt" if mode == "general" else "prompt_grounded.txt"
     )
-    context_block = _format_context(results)
-    if template:
-        return (
-            template
-            .replace("{{MODE}}", mode)
-            .replace("{{CONTEXT}}", context_block)
-            .replace("{{QUESTION}}", query)
-        )
-
-    if mode == "general":
-        parts = [
-            f"Mode: {mode}",
-            context_block,
-            "",
-            f"Question: {query}",
-            "",
-            "Instructions:",
-            "- You may use your general knowledge to answer.",
-            "- Prefer any relevant information from the context above, citing snippet numbers like [2], [5].",
-            "- If there isn't enough information for a confident answer, please give your best guess",
-            "- Be clear and concise.",
-        ]
-        return "\n".join(parts)
-
-    # grounded (default) tuned for concise analysis and anomaly (why-not) explanations
-    parts = [
-        f"Mode: {mode}",
-        context_block,
-        "",
-        f"Question: {query}",
-        "",
-        "Instructions:",
-        "- Base your answer strictly on the context snippets above.",
-        "- Identify which snippets match and explain why (traits, classification, behavior).",
-        "- Briefly note any top snippets that do NOT match and why (anomalies/out-of-scope).",
-        "- Use citations with snippet numbers like [2], [5].",
-        "- Be concise: 3-6 bullets total, each 1-2 short sentences.",
-        "- If there isn't enough information, reply: I don't know.",
-        "",
-        "Output format: Bulleted list with citations. Optionally end with a one-line summary.",
-    ]
-    return "\n".join(parts)
+    template = _load_template(str(tpl_path))
+    if not template:
+        raise RuntimeError(f"Missing prompt template: {tpl_path}")
+    return (
+        template
+        .replace("{{MODE}}", mode)
+        .replace("{{CONTEXT}}", _format_context(results))
+        .replace("{{QUESTION}}", query)
+    )
 
 
 def call_ollama(prompt: str) -> str:
+    # Read Ollama configuration via shared helper (validates and casts)
+    cfg = get_ollama_config()
+    # Use chat API with a guiding system message; allow general knowledge if mode permits (conveyed in prompt)
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a careful assistant. In grounded mode, answer using only the provided context snippets. "
+                "In general mode, you may answer using your general knowledge even if the context is irrelevant, "
+                "while preferring and citing any relevant snippets when applicable. Answer with your best guess if unknown."
+            ),
+        },
+        {"role": "user", "content": prompt},
+    ]
     try:
-        import ollama  # type: ignore
-    except Exception as e:
-        raise RuntimeError("Ollama client not installed. Please run: uv add ollama") from e
-
-    # Read environment variables directly and cast
-    model = os.getenv("OLLAMA_MODEL")
-    temperature = float(os.getenv("RESPONSE_TEMPERATURE"))
-    num_ctx = int(os.getenv("NUM_CTX"))
-    num_predict = int(os.getenv("NUM_PREDICT"))
-    try:
-        # Use chat API with a guiding system message; allow general knowledge if mode permits (conveyed in prompt)
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a careful assistant. In grounded mode, answer using only the provided context snippets. "
-                    "In general mode, you may answer using your general knowledge even if the context is irrelevant, "
-                    "while preferring and citing any relevant snippets when available. If you truly cannot answer, say 'I don't know'."
-                ),
-            },
-            {"role": "user", "content": prompt},
-        ]
         resp = ollama.chat(
-            model=model,
+            model=cfg["model"],
             messages=messages,
             options={
-                "temperature": temperature,
-                "num_ctx": num_ctx,
-                "num_predict": num_predict,
+                "temperature": cfg["temperature"],
+                "num_ctx": cfg["num_ctx"],
+                "num_predict": cfg["num_predict"],
             },
         )
-        # Prefer attribute access (ChatResponse), fallback to dict
-        text = getattr(getattr(resp, "message", {}), "content", None)
-        if not text and isinstance(resp, dict):
-            text = resp.get("message", {}).get("content")
-        return text or ""
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - third-party may raise varied exceptions
         raise RuntimeError(
             "Ollama API error. Ensure Ollama is running and the model is pulled (e.g., 'ollama pull gemma3')."
         ) from e
 
+    # Prefer attribute access (ChatResponse), fallback to dict
+    text = getattr(getattr(resp, "message", {}), "content", None)
+    if not text and isinstance(resp, dict):
+        # Be specific on parsing-related issues to avoid very broad catches
+        try:
+            text = resp.get("message", {}).get("content")  # type: ignore[assignment]
+        except (AttributeError, TypeError, ValueError):
+            text = None
+    return text or ""
+
 
 def main() -> int:
-    load_dotenv()
 
     # Read stdin JSON: {"query": str, "k": int}
     data = sys.stdin.read().strip()
     try:
         payload = json.loads(data) if data else {}
-    except Exception:
+    except (json.JSONDecodeError, TypeError, ValueError):
         payload = {}
-    query = str(payload.get("query", "Find sentences that are about animals.")).strip()
+    raw_q = payload.get("query")
+    query = (str(raw_q).strip() if raw_q is not None else "")
+    if not query:
+        print(json.dumps({
+            "ok": False,
+            "error": "No query provided. Please include a 'query' in the request.",
+        }))
+        return 0
     k = int(payload.get("k", 5))
 
     search_out = run_search(query, k)
@@ -149,9 +121,7 @@ def main() -> int:
     # Choose mode based on context strength: default GENERAL unless threshold for grounded is met
     max_sim = max((float(r.get("similarity", 0.0)) for r in results), default=0.0)
     threshold = float(os.getenv("CONTEXT_THRESHOLD"))
-    mode = "general"
-    if max_sim >= threshold:
-        mode = "grounded"
+    mode = "grounded" if max_sim >= threshold else "general"
 
     prompt = build_prompt(query, results, mode=mode)
     answer = call_ollama(prompt)

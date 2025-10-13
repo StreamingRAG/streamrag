@@ -1,0 +1,16 @@
+[MASTER]
+init-hook = import sys; sys.path.append("src")
+
+[MESSAGES CONTROL]
+disable =
+  C0114,  # missing-module-docstring
+  C0115,  # missing-class-docstring
+  C0116,  # missing-function-docstring
+  C0410,  # multiple-imports on one line
+  C0411,  # wrong-import-order (we keep pragmatic imports)
+
+[FORMAT]
+max-line-length = 140
+
+[BASIC]
+good-names = i,j,k,q,id,db

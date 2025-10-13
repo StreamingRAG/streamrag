@@ -1,4 +1,4 @@
-# streamrag
+# streamrag <img alt="CI" src="https://github.com/StreamingRAG/streamrag/actions/workflows/ci.yml/badge.svg">
 
 Minimal RAG demo on PostgreSQL + pgvector, FastAPI, and local LLM via Ollama.
 
