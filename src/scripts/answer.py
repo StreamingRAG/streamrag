@@ -87,7 +87,7 @@ def call_ollama(prompt: str) -> str:
                 "num_predict": cfg["num_predict"],
             },
         )
-    except Exception as e:  # noqa: BLE001 - third-party may raise varied exceptions
+    except Exception as e:
         raise RuntimeError(
             "Ollama API error. Ensure Ollama is running and the model is pulled (e.g., 'ollama pull gemma3')."
         ) from e
