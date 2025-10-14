@@ -17,6 +17,14 @@ Copy `.env.example` to `.env` and set values (DB URL, model, templates).
 
 3) Install deps and run API
 
+Simplest (Python):
+
+```powershell
+uv run python run.py
+```
+
+Alternative (original uvicorn CLI):
+
 ```powershell
 uv sync
 uv run uvicorn --app-dir src streamrag.api:app --reload
