@@ -13,13 +13,14 @@ ollama pull gemma3
 
 2) Configure environment
 
-Copy `.env.example` to `.env` and set values (DB URL, model, templates).
+Copy `.env.example` to `.env` and set values (only DATABASE_URL is hidden).
 
 3) Install deps and run API
 
 Simplest (Python):
 
 ```powershell
+uv sync
 uv run python run.py
 ```
 
